@@ -331,7 +331,9 @@
 
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.lineWidth = 3;
+    const normalLineWidth = 3;
+    const eraserLineWidth = 18;
+    ctx.lineWidth = normalLineWidth;
 
     let myColor = "#ffffff";
     let isErasing = false;
@@ -446,7 +448,13 @@
 
     function drawLine(x0, y0, x1, y1, color) {
       ctx.save();
-      ctx.strokeStyle = color || myColor;
+      const strokeColor = color || myColor;
+      ctx.strokeStyle = strokeColor;
+      if (strokeColor === eraseColor) {
+        ctx.lineWidth = eraserLineWidth;
+      } else {
+        ctx.lineWidth = normalLineWidth;
+      }
       ctx.beginPath();
       ctx.moveTo(x0, y0);
       ctx.lineTo(x1, y1);
