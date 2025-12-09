@@ -1,14 +1,16 @@
-// server.js - Picture Duel rounds v5
+// server.js - Picture Duel rounds v7
 // Features:
 // - Rooms with host & players
 // - Host chooses category and round duration ONCE per game
-// - Big word bank for each category
+// - Big word bank including wildcard
 // - Word only visible to drawer
-// - 45/60/75s timer with scoring by speed
+// - Default round duration 90s; other options 75s (speed), 120s (relaxed)
+// - Speed-based scoring
 // - Drawer gains +1 per correct guesser
 // - Each player gets 3 drawing turns, then game ends
-// - After each round: tally, then 5s "next turn" countdown
-// - Next rounds start automatically (no need to click start again)
+// - After each round: tally, then 5s "next turn" countdown, then auto-start next round
+// - Per-room drawing & chat
+// - Drawing supports per-stroke colour (and clients can simulate eraser by sending background colour)
 
 const path = require("path");
 const express = require("express");
@@ -24,147 +26,65 @@ app.use(express.static(path.join(__dirname, "public")));
 // -------- Word bank --------
 const WORDS = {
   animals: [
-    "CAT","DOG","RABBIT","HAMSTER","GUINEA PIG","GERBIL","MOUSE","RAT","PARROT","GOLDFISH",
-    "CANARY","BUDGIE","TURTLE","TORTOISE","LIZARD","SNAKE","FROG","TOAD","NEWT","HORSE",
-    "PONY","DONKEY","MULE","COW","BULL","CALF","PIG","PIGLET","SHEEP","LAMB",
-    "GOAT","CHICKEN","ROOSTER","HEN","DUCK","DRAKE","GOOSE","GANDER","TURKEY","RABBIT",
-    "DEER","STAG","DOE","FOX","WOLF","BEAR","POLAR BEAR","PANDA","KOALA","KANGAROO",
-    "WALLABY","ELEPHANT","GIRAFFE","HIPPOPOTAMUS","RHINOCEROS","ZEBRA","LION","TIGER","CHEETAH","LEOPARD",
-    "JAGUAR","HYENA","MONKEY","GORILLA","CHIMPANZEE","ORANGUTAN","BABOON","MEERKAT","LEMUR","OTTER",
-    "SEAL","SEA LION","WALRUS","DOLPHIN","WHALE","ORCA","SHARK","RAY","STINGRAY","OCTOPUS",
-    "SQUID","CRAB","LOBSTER","PRAWN","SHRIMP","STARFISH","SEAHORSE","JELLYFISH","SALMON","TROUT",
-    "CLOWNFISH","TUNA","EAGLE","HAWK","FALCON","OWL","BUZZARD","VULTURE","PIGEON","DOVE",
-    "SPARROW","ROBIN","BLUE JAY","BLACKBIRD","CROW","RAVEN","MAGPIE","WOODPECKER","SWAN","DUCKLING",
-    "GOSLING","OSTRICH","EMU","PEACOCK","FLAMINGO","HERON","STORK","CRANE","PENGUIN","SEAGULL",
-    "BEE","WASP","ANT","BEETLE","BUTTERFLY","MOTH","DRAGONFLY","LADYBIRD","SPIDER","SCORPION",
-    "WORM","SNAIL","SLUG","HEDGEHOG","BADGER","MOLE","SQUIRREL","CHIPMUNK","RACCOON","SKUNK",
-    "BAT","BOAR","HARE","TURTLEDOVE","IBIS","PARAKEET","MACAW","COCKATOO","CHAMELEON","IGUANA",
-    "GECKO","PYTHON","BOA","CROCODILE","ALLIGATOR","TAPIR","ANTELOPE","GAZELLE","MOOSE","ELK",
-    "BUFFALO","BISON","CAMEL","ALPACA","LLAMA","PORCUPINE","PLATYPUS","WOMBAT","DINGO","TARSIER",
-    "MANATEE","NARWHAL","WOLF PUP","LION CUB","TIGER CUB","BABY ELEPHANT","BABY SEAL","KITTEN","PUPPY","DUCKBILL PLATYPUS"
+    "CAT","DOG","ELEPHANT","LION","TIGER","GIRAFFE","MONKEY","FISH","BIRD","SNAKE","RABBIT","HORSE",
+    "COW","PIG","SHEEP","GOAT","ZEBRA","KANGAROO","PANDA","BEAR","FOX","WOLF","MOUSE","RAT",
+    "OWL","EAGLE","SHARK","WHALE","DOLPHIN","PENGUIN","TURTLE","FROG","DUCK","CHICKEN"
   ],
   objects: [
-    "CHAIR","TABLE","SOFA","BED","PILLOW","BLANKET","LAMP","LIGHT","TV","REMOTE",
-    "PHONE","TABLET","LAPTOP","KEYBOARD","MOUSE","HEADPHONES","CAMERA","CLOCK","WATCH","MUG",
-    "CUP","BOTTLE","GLASS","PLATE","BOWL","FORK","KNIFE","SPOON","PAN","POT",
-    "KETTLE","TOASTER","FRIDGE","FREEZER","OVEN","MICROWAVE","BLENDER","VACUUM","BUCKET","BRUSH",
-    "BROOM","MOP","DUSTER","BIN","BACKPACK","SUITCASE","WALLET","PURSE","UMBRELLA","COAT",
-    "HAT","SCARF","GLOVES","SHOES","BOOT","TRAINERS","SOCKS","BELT","TORCH","CANDLE",
-    "BOOK","NOTEBOOK","PEN","PENCIL","RULER","ERASER","SCISSORS","GLUE","TAPE","STAPLER",
-    "PAINTBRUSH","PAINT","MARKER","CRAYON","PAPER","LETTER","ENVELOPE","STAMP","PARCEL","BALL",
-    "FOOTBALL","BASKETBALL","TENNIS BALL","SKIPPING ROPE","BAT","RACKET","SKATEBOARD","SCOOTER","BICYCLE","HELMET",
-    "HAMMER","SCREWDRIVER","WRENCH","SAW","NAIL","SCREW","DRILL","TAPE MEASURE","TOOLBOX","LADDER",
-    "HOSE","WATERING CAN","PLANT POT","FLOWER POT","BINOCULARS","MAP","COMPASS","GUITAR","DRUM","PIANO",
-    "SPEAKER","MICROPHONE","RADIO","CHARGER","PLUG","CABLE","EXTENSION LEAD","FAN","HEATER","AIR CONDITIONER",
-    "CALCULATOR","WHITEBOARD","CHALK","MAGNET","ROPE","CHAIN","PADLOCK","KEY","DOOR","WINDOW"
+    "CHAIR","TABLE","CAR","BICYCLE","PHONE","LAPTOP","KEY","BOOK","BED","CUP","CLOCK","PENCIL",
+    "SCISSORS","BAG","UMBRELLA","LAMP","REMOTE","HEADPHONES","BOTTLE","GLASSES","TOOTHBRUSH",
+    "BACKPACK","SOFA","TV","CAMERA","WATCH"
   ],
   food: [
-    "APPLE","BANANA","ORANGE","PEAR","GRAPE","STRAWBERRY","BLUEBERRY","PINEAPPLE","MANGO","WATERMELON",
-    "LEMON","LIME","CHERRY","PEACH","PLUM","KIWI","AVOCADO","TOMATO","CUCUMBER","CARROT",
-    "POTATO","ONION","GARLIC","BROCCOLI","CAULIFLOWER","PEPPER","CHILLI","MUSHROOM","LETTUCE","SPINACH",
-    "PEAS","SWEETCORN","BEANS","RICE","PASTA","NOODLES","BREAD","TOAST","BAGEL","SANDWICH",
-    "BURGER","PIZZA","HOT DOG","TACO","BURRITO","WRAP","FRIES","NUGGETS","STEAK","CHICKEN",
-    "BACON","HAM","SAUSAGE","MEATBALL","FISH","SALMON","TUNA","SHRIMP","CRAB","LOBSTER",
-    "EGG","CHEESE","MILK","BUTTER","YOGURT","ICE CREAM","CHOCOLATE","CAKE","COOKIE","BROWNIE",
-    "MUFFIN","CUPCAKE","PIE","DOUGHNUT","PANCAKE","WAFFLE","CEREAL","PORRIDGE","SOUP","SALAD",
-    "CURRY","STIR FRY","PAELLA","KEBAB","CHILLI CON CARNE","OMELETTE","RISOTTO","SUSHI","RAMEN","DUMPLING",
-    "CHIPS","POPCORN","CRISPS","NUTS","RAISINS","JELLY","CUSTARD","PUDDING","FRUIT SALAD","SMOOTHIE",
-    "TEA","COFFEE","JUICE","WATER","SODA","LEMONADE","MILKSHAKE","HOT CHOCOLATE","ENERGY DRINK","ICED TEA"
+    "PIZZA","BURGER","APPLE","BANANA","ICE CREAM","CAKE","SANDWICH","PASTA","CHEESE","CARROT","EGG",
+    "HOT DOG","SALAD","SOUP","COOKIE","CHOCOLATE","DONUT","PANCAKE","WAFFLE","ORANGE","GRAPES",
+    "STRAWBERRY","WATERMELON","FRIES","RICE","NOODLES"
   ],
   places: [
     "PARK","BEACH","MOUNTAIN","SCHOOL","HOUSE","SHOP","CASTLE","FOREST","BRIDGE","STATION",
     "HOSPITAL","LIBRARY","MUSEUM","AIRPORT","STADIUM","PLAYGROUND","FARM","CITY","VILLAGE","ISLAND",
-    "OFFICE","FACTORY","WAREHOUSE","GARAGE","GARDEN","BACKYARD","TOWN HALL","POLICE STATION","FIRE STATION","ZOO",
-    "AQUARIUM","THEME PARK","AMUSEMENT PARK","CINEMA","THEATRE","RESTAURANT","CAFE","SUPERMARKET","MARKET","CAR PARK",
-    "BUS STOP","TRAIN PLATFORM","PORT","HARBOUR","LIGHTHOUSE","RIVER","LAKE","DESERT","JUNGLE","CAVE"
+    "OFFICE","FACTORY","WAREHOUSE","GARAGE","GARDEN","BACKYARD","ZOO","THEME PARK"
   ],
   sports: [
     "FOOTBALL","BASKETBALL","TENNIS","GOLF","SWIMMING","RUNNING","CYCLING","BOXING","SKIING",
     "SURFING","VOLLEYBALL","RUGBY","CRICKET","BASEBALL","TABLE TENNIS","BADMINTON","SKATEBOARDING",
-    "HOCKEY","ICE HOCKEY","HANDBALL","ARCHERY","FENCING","GYMNASTICS","ROWING","SAILING","KARATE","JUDO",
-    "TAEKWONDO","MARTIAL ARTS","CLIMBING","HORSE RIDING"
+    "HOCKEY","GYMNASTICS","ROWING","SAILING","ARCHERY","CLIMBING","HORSE RIDING"
   ],
   jobs: [
     "TEACHER","DOCTOR","NURSE","POLICE OFFICER","FIREFIGHTER","CHEF","ARTIST","MUSICIAN","SCIENTIST",
     "PILOT","DRIVER","FARMER","BUILDER","ENGINEER","WRITER","DANCER","ACTOR","HAIRDRESSER",
-    "MECHANIC","ELECTRICIAN","PLUMBER","VET","LAWYER","JUDGE","SHOP ASSISTANT","RECEPTIONIST","LIBRARIAN","POSTMAN",
-    "DELIVERY DRIVER","SOFTWARE DEVELOPER","GAME DESIGNER","BARBER","BAKER","BUTCHER","NANNY","PHOTOGRAPHER","REPORTER","NEWSREADER"
+    "MECHANIC","ELECTRICIAN","PLUMBER","VET","LAWYER","LIBRARIAN","BAKER","PHOTOGRAPHER"
   ],
   actions: [
     "RUN","JUMP","SLEEP","EAT","DRINK","DANCE","SING","READ","WRITE","DRAW","SWIM","FLY",
-    "CLIMB","LAUGH","CRY","SMILE","COOK","DRIVE","THROW","CATCH","KICK","HUG","WAVE","SHAKE HANDS",
-    "BRUSH TEETH","WASH HANDS","OPEN DOOR","CLOSE DOOR","TURN ON LIGHT","TURN OFF LIGHT","RING DOORBELL",
-    "PLAY GUITAR","PLAY PIANO","TYPE","PHONE CALL","TAKE PHOTO","PAINT"
+    "CLIMB","LAUGH","CRY","SMILE","COOK","DRIVE","THROW","CATCH","KICK","HUG","WAVE",
+    "BRUSH TEETH","WASH HANDS","OPEN DOOR","CLOSE DOOR","RING DOORBELL"
   ],
   transport: [
     "CAR","BUS","TRAIN","PLANE","BOAT","SHIP","BICYCLE","MOTORBIKE","TRAM","SUBWAY","HELICOPTER",
-    "SCOOTER","ROCKET","TAXI","VAN","TRUCK","AMBULANCE","FIRE ENGINE","POLICE CAR","TRACTOR",
-    "CANOE","KAYAK","FERRY","CRUISE SHIP","CABLE CAR","TANK","SUBMARINE"
+    "SCOOTER","ROCKET","TAXI","VAN","TRUCK","AMBULANCE","FIRE ENGINE","POLICE CAR","TRACTOR"
   ],
   fantasy: [
     "DRAGON","UNICORN","WIZARD","CASTLE","KNIGHT","PRINCESS","GIANT","MERMAID","GHOST",
-    "ROBOT","ALIEN","FAIRY","VAMPIRE","WEREWOLF","TREASURE","MAGIC WAND",
-    "POTION","SPELL BOOK","MAGIC CARPET","TROLL","ELF","DWARF","PHOENIX","GRIFFIN","TIME MACHINE","SPACESHIP"
+    "ROBOT","ALIEN","FAIRY","VAMPIRE","WEREWOLF","TREASURE","MAGIC WAND","POTION","SPELL BOOK",
+    "MAGIC CARPET","TROLL","ELF","DWARF","PHOENIX","GRIFFIN","TIME MACHINE","SPACESHIP"
   ],
   wildcard: [
-  "RAINBOW","VOLCANO","TORNADO","TREASURE","MAZE","PORTAL","MONSTER","SANDCASTLE","SNOWMAN","ROBOT",
-  "ALIEN","DRAGON","ISLAND","CIRCUS","FUNFAIR","TIGHTROPE","MIRROR","CASTLE","GADGET","COMIC",
-
-  "CLOUD","STORM","LIGHTNING","THUNDER","SUNRISE","SUNSET","OCEAN","FOREST","JUNGLE","DESERT",
-  "MOUNTAIN","CAVE","RIVER","ISLAND","LAGOON","CANYON","GLACIER","HURRICANE","WILDFIRE","AURORA",
-
-  "MAGNET","BATTERY","COMPASS","ROCKET","TELESCOPE","SATELLITE","PLANET","ASTEROID","COMET","GALAXY",
-  "SPACESHIP","UFO","ANDROID","DRONE","LASER","BEACON","CRYSTAL","PUZZLE","LABYRINTH","BLUEPRINT",
-
-  "TREASURE","RELlC","TOTEM","AMULET","ORACLE","FOSSIL","RELIC","CHARM","SPELL","POTION",
-  "SCROLL","WAND","RUNES","ORB","GEM","JEWEL","CROWN","THRONE","SCEPTER","ALTAR",
-
-  "KEYHOLE","DOORWAY","WINDOW","BRIDGE","TUNNEL","TOWER","FURNACE","CHAMBER","WORKSHOP","ARCHIVE",
-  "MARKET","THEATRE","STUDIO","FACTORY","LIBRARY","GARDEN","PLAYGROUND","WORKSHOP","GARAGE","BASEMENT",
-
-  "WHIRLWIND","FIREBALL","STARLIGHT","SHADOW","EMBER","SPARK","FLAME","WAVE","QUAKE","BLIZZARD",
-
-  "ANVIL","HAMMER","CHISEL","BRUSH","PENCIL","NOTEBOOK","LANTERN","RADIO","CLOCK","LOCK",
-  "SAFE","CHEST","BOTTLE","BARREL","BUCKET","BALLOON","KITE","PUZZLE","DICE","TOKEN",
-
-  "MASK","HELMET","CAPE","ARMOR","SHIELD","SWORD","AXE","BOW","QUIVER","LANCE",
-
-  "COOKIE","PANCAKE","BURGER","NOODLES","PIZZA","APPLE","BANANA","ORANGE","CARROT","BROCCOLI",
-
-  "PUPPET","MARIONETTE","CLOWN","TRAPEZE","JUGGLER","MAGNET","RECORD","VINYL","CAMERA","MICROPHONE",
-
-  "GHOST","SPIRIT","PHANTOM","SHADOW","ZOMBIE","GOBLIN","ORC","WIZARD","KNIGHT","FAIRY",
-
-  "ROCKET","PORTAL","LAB","ARENA","TEMPLE","VILLAGE","CITY","KINGDOM","DUNGEON","WORKSHOP"
-]
-
+    "TIME TRAVEL","SUPERHERO","PIRATE SHIP","HAUNTED HOUSE","DINOSAUR","SPACE STATION","RAINBOW","VOLCANO",
+    "STORM","TORNADO","TREASURE MAP","SECRET DOOR","MAZE","INVISIBLE MAN","SHRINK RAY",
+    "MONSTER UNDER THE BED","SANDCASTLE","SNOWMAN","ROBOT BUTLER","ALIEN PLANET","DRAGON EGG","FLOATING ISLAND",
+    "MAGIC SCHOOL","PUPPET THEATRE","ESCAPE ROOM","GAME CONTROLLER","FIREWORKS","CIRCUS","FUNFAIR","TIGHTROPE",
+    "MAGIC MIRROR","TIME PORTAL","ICE CASTLE","GIANT ROBOT","SPY GADGET","SECRET LAB","COMIC BOOK","BOARD GAME"
+  ]
 };
 
-module.exports = { WORDS };
-
-const DEFAULT_ROUND_DURATION_MS = 45000;
+const DEFAULT_ROUND_DURATION_MS = 90000; // 90 seconds default
 const MAX_DRAWS_PER_PLAYER = 3;
 const PRE_ROUND_DELAY_MS = 2000;   // "tally" time
 const PRE_ROUND_COUNTDOWN_MS = 5000; // visible 5s countdown
 const AUTO_NEXT_ROUND_DELAY_MS = PRE_ROUND_DELAY_MS + PRE_ROUND_COUNTDOWN_MS;
 
-// rooms = {
-//   CODE: {
-//     players: { socketId: { name, score, draws } },
-//     hostId,
-//     usedWords: Set<string>,
-//     currentWord,
-//     currentCategory,
-//     drawerId,
-//     roundActive,
-//     roundStartTime,
-//     roundDurationMs,
-//     roundTimeout,
-//     nextRoundTimeout,
-//     guessState: { socketId: { correct, score, time } },
-//     gameOver: boolean
-//   }
-// }
+// rooms = {...} similar to earlier versions
 const rooms = {};
 
 function createRoom(code) {
@@ -209,8 +129,6 @@ function emitRoomState(roomCode) {
 function pickNextDrawer(room) {
   const ids = Object.keys(room.players);
   if (ids.length === 0) return null;
-
-  // pick the player with the fewest draws; tie-breaker = join order
   let bestId = null;
   let bestDraws = Infinity;
   for (const id of ids) {
@@ -226,10 +144,8 @@ function pickNextDrawer(room) {
 function pickWord(room, categoryKey) {
   const list = WORDS[categoryKey];
   if (!list) return null;
-
   const unused = list.filter((w) => !room.usedWords.has(w));
   if (unused.length === 0) return null;
-
   const idx = Math.floor(Math.random() * unused.length);
   const word = unused[idx];
   room.usedWords.add(word);
@@ -237,7 +153,6 @@ function pickWord(room, categoryKey) {
 }
 
 function scoreForDelta(deltaMs) {
-  // First 10s = 10 points, then -1 every 5s down to min 1
   if (deltaMs < 0) deltaMs = 0;
   let score = 10;
   if (deltaMs > 10000) {
@@ -259,13 +174,13 @@ function scheduleNextRound(roomCode) {
   if (room.gameOver) return;
 
   room.nextRoundTimeout = setTimeout(() => {
-    const room2 = rooms[roomCode];
-    if (!room2) return;
-    room2.nextRoundTimeout = null;
-    if (room2.gameOver) return;
-    if (room2.roundActive) return;
+    const r = rooms[roomCode];
+    if (!r) return;
+    r.nextRoundTimeout = null;
+    if (r.gameOver) return;
+    if (r.roundActive) return;
 
-    const category = room2.currentCategory;
+    const category = r.currentCategory;
     if (!category || !WORDS[category]) {
       io.to(roomCode).emit("round_error", {
         message: "No category set or words missing for next round."
@@ -273,7 +188,7 @@ function scheduleNextRound(roomCode) {
       return;
     }
 
-    const drawerId = pickNextDrawer(room2);
+    const drawerId = pickNextDrawer(r);
     if (!drawerId) {
       io.to(roomCode).emit("round_error", {
         message: "No drawer available for next round."
@@ -281,7 +196,7 @@ function scheduleNextRound(roomCode) {
       return;
     }
 
-    const word = pickWord(room2, category);
+    const word = pickWord(r, category);
     if (!word) {
       io.to(roomCode).emit("round_error", {
         message: "No words left in this category."
@@ -289,36 +204,30 @@ function scheduleNextRound(roomCode) {
       return;
     }
 
-    const dur = room2.roundDurationMs || DEFAULT_ROUND_DURATION_MS;
+    const dur = r.roundDurationMs || DEFAULT_ROUND_DURATION_MS;
 
-    room2.drawerId = drawerId;
-    room2.currentWord = word;
-    room2.roundActive = true;
-    room2.roundStartTime = Date.now();
-    room2.guessState = {};
+    r.drawerId = drawerId;
+    r.currentWord = word;
+    r.roundActive = true;
+    r.roundStartTime = Date.now();
+    r.guessState = {};
+    r.players[drawerId].draws = (r.players[drawerId].draws || 0) + 1;
 
-    // Increment draws count for drawer
-    room2.players[drawerId].draws = (room2.players[drawerId].draws || 0) + 1;
-
-    // Setup timer
-    if (room2.roundTimeout) {
-      clearTimeout(room2.roundTimeout);
-    }
-    room2.roundTimeout = setTimeout(() => {
+    if (r.roundTimeout) clearTimeout(r.roundTimeout);
+    r.roundTimeout = setTimeout(() => {
       endRound(roomCode, "time_up");
     }, dur);
 
-    const endTime = room2.roundStartTime + dur;
+    const endTime = r.roundStartTime + dur;
 
     io.to(roomCode).emit("round_started", {
       drawerId,
-      drawerName: room2.players[drawerId].name,
+      drawerName: r.players[drawerId].name,
       category,
       roundDurationMs: dur,
       roundEndTime: endTime
     });
 
-    // Secret word only to drawer
     io.to(drawerId).emit("your_word", { word });
 
     emitRoomState(roomCode);
@@ -327,8 +236,7 @@ function scheduleNextRound(roomCode) {
 
 function endRound(roomCode, reason) {
   const room = rooms[roomCode];
-  if (!room) return;
-  if (!room.roundActive) return;
+  if (!room || !room.roundActive) return;
 
   room.roundActive = false;
   if (room.roundTimeout) {
@@ -365,7 +273,6 @@ function endRound(roomCode, reason) {
   room.roundStartTime = null;
   room.guessState = {};
 
-  // Check for game over: everyone has drawn MAX_DRAWS_PER_PLAYER times
   let done = true;
   for (const p of Object.values(room.players)) {
     if ((p.draws || 0) < MAX_DRAWS_PER_PLAYER) {
@@ -386,7 +293,7 @@ function endRound(roomCode, reason) {
         name: p.name,
         score: p.score || 0
       }))
-      .sort((a, b) => a.score - b.score); // lowest to highest
+      .sort((a, b) => a.score - b.score);
 
     io.to(roomCode).emit("game_over", {
       leaderboard,
@@ -442,7 +349,6 @@ io.on("connection", (socket) => {
       }
       const room = rooms[code];
 
-      // unique name in room
       const existingNames = Object.values(room.players).map((p) =>
         p.name.toLowerCase()
       );
@@ -454,7 +360,6 @@ io.on("connection", (socket) => {
       }
       socket.data.name = finalName;
 
-      // leave old room if any
       const oldCode = socket.data.roomCode;
       if (oldCode && oldCode !== code && rooms[oldCode]) {
         const oldRoom = rooms[oldCode];
@@ -480,7 +385,6 @@ io.on("connection", (socket) => {
         draws: existing ? existing.draws : 0
       };
 
-      // First player becomes host
       if (!room.hostId) {
         room.hostId = socket.id;
       }
@@ -509,7 +413,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Host starts the FIRST round with category + duration
   socket.on("host_start_round", ({ category, durationMs }) => {
     const roomCode = socket.data.roomCode;
     const room = rooms[roomCode];
@@ -527,7 +430,6 @@ io.on("connection", (socket) => {
       return;
     }
     if (room.currentCategory && room.usedWords.size > 0) {
-      // Settings already locked for this game; ignore extra manual starts
       socket.emit("round_error", { message: "Game already in progress." });
       return;
     }
@@ -552,14 +454,11 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Round duration from host selection: default 45s
     let dur = parseInt(durationMs, 10);
     if (!Number.isFinite(dur) || dur < 10000 || dur > 120000) {
       dur = DEFAULT_ROUND_DURATION_MS;
     }
     room.roundDurationMs = dur;
-
-    // Lock in game settings
     room.currentCategory = category;
 
     room.drawerId = drawerId;
@@ -567,11 +466,8 @@ io.on("connection", (socket) => {
     room.roundActive = true;
     room.roundStartTime = Date.now();
     room.guessState = {};
-
-    // Increment draws count for drawer
     room.players[drawerId].draws = (room.players[drawerId].draws || 0) + 1;
 
-    // Setup timer
     if (room.roundTimeout) {
       clearTimeout(room.roundTimeout);
     }
@@ -589,13 +485,11 @@ io.on("connection", (socket) => {
       roundEndTime: endTime
     });
 
-    // Secret word only to drawer
     io.to(drawerId).emit("your_word", { word });
 
     emitRoomState(roomCode);
   });
 
-  // Guessing
   socket.on("submit_guess", ({ guess }) => {
     const roomCode = socket.data.roomCode;
     const room = rooms[roomCode];
@@ -604,7 +498,6 @@ io.on("connection", (socket) => {
 
     const playerId = socket.id;
     if (playerId === room.drawerId) {
-      // Drawer cannot guess
       return;
     }
     const player = room.players[playerId];
@@ -618,7 +511,6 @@ io.on("connection", (socket) => {
 
     const already = room.guessState[playerId];
     if (already && already.correct) {
-      // Already guessed correctly this round
       return;
     }
 
@@ -632,7 +524,6 @@ io.on("connection", (socket) => {
 
       player.score = (player.score || 0) + score;
 
-      // Drawer gets +1 per correct guess
       if (room.drawerId && room.players[room.drawerId]) {
         room.players[room.drawerId].score =
           (room.players[room.drawerId].score || 0) + 1;
@@ -651,7 +542,6 @@ io.on("connection", (socket) => {
 
       socket.emit("guess_result", { correct: true, score });
 
-      // Check if all non-drawers have guessed correctly
       let allCorrect = true;
       for (const [id, p] of Object.entries(room.players)) {
         if (id === room.drawerId) continue;
@@ -671,7 +561,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // per-room drawing (drawer only)
+  // per-room drawing (drawer only) with optional colour
   socket.on("draw_line", (data) => {
     const roomCode = socket.data.roomCode;
     const room = rooms[roomCode];
@@ -681,7 +571,6 @@ io.on("connection", (socket) => {
     if (!data) return;
     const { x0, y0, x1, y1, color } = data;
     if ([x0, y0, x1, y1].some((v) => typeof v !== "number")) return;
-    // allow optional color string; just pass through to clients
     socket.to(roomCode).emit("draw_line", data);
   });
 
@@ -694,7 +583,6 @@ io.on("connection", (socket) => {
     socket.to(roomCode).emit("clear");
   });
 
-  // Host can reset game (scores, draws, usedWords) but keep players
   socket.on("host_reset_game", () => {
     const roomCode = socket.data.roomCode;
     const room = rooms[roomCode];
@@ -734,7 +622,6 @@ io.on("connection", (socket) => {
     console.log("client disconnected:", socket.id, name || "");
     if (roomCode && rooms[roomCode]) {
       const room = rooms[roomCode];
-
       const wasDrawer = room.drawerId === socket.id;
 
       delete room.players[socket.id];
@@ -744,7 +631,6 @@ io.on("connection", (socket) => {
         if (room.nextRoundTimeout) clearTimeout(room.nextRoundTimeout);
         delete rooms[roomCode];
       } else {
-        // If host left, assign new host
         if (room.hostId === socket.id) {
           room.hostId = Object.keys(room.players)[0];
         }
