@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Picture Duel · Rounds v5</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .wrapper {
+      width: min(1150px, 100vw - 16px);
+      margin: 8px;
+    }
+    .card {
+      background: #181821;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #333;
+    }
+    .grid-game {
+      display: grid;
+      grid-template-columns: 2fr 1.1fr;
+      gap: 12px;
+    }
+    @media (max-width: 900px) {
+      .grid-game {
+        grid-template-columns: 1fr;
+      }
+    }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+    label { font-size: 0.8rem; }
+    input[type="text"], select {
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid #444;
+      background: #101018;
+      color: #f5f5f5;
+    }
+    button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: none;
+      background: #b31217;
+      color: white;
+      font-size: 0.8rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.secondary { background: #333; }
+    button.small { font-size: 0.75rem; padding: 4px 8px; }
+    button[disabled] {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .error { color: #ff6b6b; font-size: 0.8rem; min-height: 1em; }
+    .small { font-size: 0.8rem; opacity: 0.9; }
+    #canvas {
+      border: 1px solid #555;
+      background: #222;
+      display: block;
+      margin-top: 8px;
+      touch-action: none;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+    }
+    #players { font-size: 0.85rem; margin: 4px 0; white-space: pre-line; }
+    #log {
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 4px 6px;
+      font-size: 0.8rem;
+      height: 120px;
+      overflow-y: auto;
+      background: #101018;
+      margin-top: 4px;
+    }
+    .log-line.system { opacity: 0.7; font-style: italic; }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .color-label {
+      font-size: 0.8rem;
+      opacity: 0.9;
+      margin-right: 4px;
+    }
+    .color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      padding: 0;
+      border: 2px solid #444;
+      background: transparent;
+      cursor: pointer;
+    }
+    .color-swatch.active {
+      border-color: #fff;
+      box-shadow: 0 0 6px rgba(255,255,255,0.7);
+    }
+    @media (max-width: 900px) {
+      .compact-round .hide-during-round {
+        display: none !important;
+      }
+    }
+
+
+    .col-left { display: flex; flex-direction: column; }
+    .col-right { display: flex; flex-direction: column; }
+    .box {
+      background: #11131c;
+      border-radius: 8px;
+      padding: 8px;
+      border: 1px solid #262838;
+      margin-bottom: 8px;
+    }
+    .box h2 {
+      margin: 0 0 4px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    #timerDisplay {
+      font-variant-numeric: tabular-nums;
+    }
+    #wordSecret {
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: #ffd54f;
+    }
+    #leaderboardList {
+      font-size: 0.85rem;
+    }
+    #clearBtn.drawer-active {
+      background: #ffb300;
+      color: #000;
+      box-shadow: 0 0 12px rgba(255, 179, 0, 0.7);
+    }
+    #preRoundMsg {
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- MAIN MENU -->
+    <div id="mainMenu" class="card">
+      <h1>Picture Duel</h1>
+      <p class="small">Enter your name and room code to host or join a game.</p>
+      <div class="row">
+        <div>
+          <label>Your name</label><br />
+          <input id="nameInput" type="text" maxlength="20" placeholder="Adam" />
+        </div>
+        <div>
+          <label>Room code</label><br />
+          <input id="roomInput" type="text" maxlength="8" placeholder="ABCD" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="hostBtn">Host game</button>
+        <button id="joinBtn" class="secondary">Join game</button>
+      </div>
+      <div class="error" id="errorBox"></div>
+      <div class="small" id="status" style="opacity:0.7;">Socket: connecting…</div>
+    </div>
+
+    <!-- GAME AREA -->
+    <div id="gameArea" class="card" style="display:none;">
+      <div class="grid-game">
+        <div class="col-left">
+          <h1 class="hide-during-round">Picture Duel</h1>
+          <div class="small hide-during-round" id="statusInGame">Room: –––– · <span id="roleInfo">Joining…</span></div>
+
+          <div class="box">
+            <h2>Round</h2>
+            <div class="small">Timer: <span id="timerDisplay">––</span></div>
+            <div class="small">Category: <span id="categoryDisplay">––</span></div>
+            <div class="small">Your word: <span id="wordSecret">– only for drawer –</span></div>
+            <div class="small" id="preRoundMsg"></div>
+          </div>
+
+          <canvas id="canvas" width="760" height="380"></canvas>
+          <div class="color-row">
+            <span class="color-label">Colour:</span>
+            <button class="color-swatch" data-color="#ffffff" style="background:#ffffff;"></button>
+            <button class="color-swatch" data-color="#000000" style="background:#000000;"></button>
+            <button class="color-swatch" data-color="#ff0000" style="background:#ff0000;"></button>
+            <button class="color-swatch" data-color="#00ff00" style="background:#00ff00;"></button>
+            <button class="color-swatch" data-color="#0000ff" style="background:#0000ff;"></button>
+            <button class="color-swatch" data-color="#ffff00" style="background:#ffff00;"></button>
+            <button class="color-swatch" data-color="#ff00ff" style="background:#ff00ff;"></button>
+            <button class="color-swatch" data-color="#00ffff" style="background:#00ffff;"></button>
+          </div>
+          <div class="row">
+            <button id="clearBtn" class="secondary small">Clear (drawer only)</button>
+            <div class="small" id="drawHint">Only the drawer can draw during a round.</div>
+          </div>
+        </div>
+
+        <div class="col-right">
+          <div class="box hide-during-round">
+            <h2>Players</h2>
+            <div id="players" class="small">Players: (none)</div>
+          </div>
+
+          <div class="box hide-during-round" id="hostControlsBox">
+            <h2>Game setup (host)</h2>
+            <div class="small">Host chooses the category and round length, then starts the game.</div>
+            <div class="row">
+              <select id="categorySelect">
+                <option value="">Choose category…</option>
+                <option value="animals">Animals</option>
+                <option value="objects">Objects</option>
+                <option value="food">Food</option>
+                <option value="places">Places</option>
+                <option value="sports">Sports</option>
+                <option value="jobs">Jobs</option>
+                <option value="actions">Actions</option>
+                <option value="wildcard">Wildcard</option>
+                <option value="transport">Transport</option>
+                <option value="fantasy">Fantasy</option>
+              </select>
+              <select id="durationSelect">
+                <option value="45000">45 sec</option>
+                <option value="60000">60 sec</option>
+                <option value="75000">75 sec</option>
+              </select>
+            </div>
+            <div class="row">
+              <button id="startRoundBtn" class="small">Start game</button>
+              <button id="resetGameBtn" class="secondary small">Reset game</button>
+            </div>
+            <div class="small" id="hostHint"></div>
+          </div>
+
+          <div class="box">
+            <h2>Guess</h2>
+            <div class="small">Guessers type here during a round.</div>
+            <div class="row">
+              <input id="guessInput" type="text" placeholder="Type your guess" style="flex:1;min-width:0;" />
+              <button id="guessBtn" class="small">Guess</button>
+            </div>
+          </div>
+
+          <div class="box hide-during-round">
+            <h2>Chat / Log</h2>
+            <div id="log"></div>
+            <div class="row" style="margin-top:6px;">
+              <input id="chatInput" type="text" placeholder="Type chat message" style="flex:1;min-width:0;" />
+              <button id="chatSendBtn" class="small">Send</button>
+            </div>
+          </div>
+
+          <div class="box hide-during-round" id="leaderboardBox" style="display:none;">
+            <h2>Game over</h2>
+            <div class="small">Final scores (low → high):</div>
+            <div id="leaderboardList"></div>
+            <button id="playAgainBtn" class="small">Play again (host)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Socket.IO client via CDN, WITHOUT integrity attribute -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <script>
+    const mainMenu = document.getElementById("mainMenu");
+    const gameArea = document.getElementById("gameArea");
+
+    const statusEl = document.getElementById("status");
+    const statusInGame = document.getElementById("statusInGame");
+    const nameInput = document.getElementById("nameInput");
+    const roomInput = document.getElementById("roomInput");
+    const hostBtn = document.getElementById("hostBtn");
+    const joinBtn = document.getElementById("joinBtn");
+    const errorBox = document.getElementById("errorBox");
+
+    const playersEl = document.getElementById("players");
+    const logEl = document.getElementById("log");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const clearBtn = document.getElementById("clearBtn");
+    const colorButtons = document.querySelectorAll(".color-swatch");
+
+    let myColor = "#ffffff";
+
+    const roleInfo = document.getElementById("roleInfo");
+    const timerDisplay = document.getElementById("timerDisplay");
+    const categoryDisplay = document.getElementById("categoryDisplay");
+    const wordSecret = document.getElementById("wordSecret");
+    const preRoundMsg = document.getElementById("preRoundMsg");
+
+    const categorySelect = document.getElementById("categorySelect");
+    const durationSelect = document.getElementById("durationSelect");
+    const startRoundBtn = document.getElementById("startRoundBtn");
+    const resetGameBtn = document.getElementById("resetGameBtn");
+    const hostHint = document.getElementById("hostHint");
+    const hostControlsBox = document.getElementById("hostControlsBox");
+
+    const guessInput = document.getElementById("guessInput");
+    const guessBtn = document.getElementById("guessBtn");
+
+    const chatInput = document.getElementById("chatInput");
+    const chatSendBtn = document.getElementById("chatSendBtn");
+
+    const leaderboardBox = document.getElementById("leaderboardBox");
+    const leaderboardList = document.getElementById("leaderboardList");
+    const playAgainBtn = document.getElementById("playAgainBtn");
+
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = myColor;
+    ctx.lineWidth = 3;
+
+    const socket = io();
+
+    let inRoom = false;
+    let isDrawer = false;
+    let isHost = false;
+    let roundActive = false;
+    let lastX = 0;
+    let lastY = 0;
+    let isDrawing = false;
+    let roundEndTime = null;
+    let timerInterval = null;
+    let currentRoomCode = null;
+    let settingsLocked = false;
+
+    let preRoundDelayTimeout = null;
+
+    function enterCompactRound() {
+      if (window.innerWidth <= 900) {
+        document.body.classList.add("compact-round");
+      }
+    }
+
+    function exitCompactRound() {
+      document.body.classList.remove("compact-round");
+    }
+    let preRoundCountdownInterval = null;
+
+    function log(msg, type = "normal") {
+      const div = document.createElement("div");
+      div.textContent = msg;
+      if (type === "system") div.className = "log-line system";
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setError(msg) {
+      errorBox.textContent = msg || "";
+    }
+
+    function randomRoomCode() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 4; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return code;
+    }
+
+    function updateTimer() {
+      if (!roundActive || !roundEndTime) {
+        timerDisplay.textContent = "––";
+        return;
+      }
+      const now = Date.now();
+      const remaining = Math.max(0, roundEndTime - now);
+      const s = Math.ceil(remaining / 1000);
+      timerDisplay.textContent = s + "s";
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    function clearTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      timerDisplay.textContent = "––";
+    }
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function setRoleInfo() {
+      if (!inRoom) {
+        roleInfo.textContent = "Not in a room.";
+        return;
+      }
+      let parts = [];
+      if (isHost) parts.push("Host");
+      if (isDrawer) parts.push("Drawer");
+      if (!isDrawer && !isHost) parts.push("Guesser");
+      roleInfo.textContent = "You are: " + parts.join(" · ");
+    }
+
+    function updateClearButton() {
+      if (roundActive && isDrawer) {
+        clearBtn.classList.add("drawer-active");
+      } else {
+        clearBtn.classList.remove("drawer-active");
+      }
+    }
+
+    function clearPreRound() {
+      if (preRoundDelayTimeout) {
+        clearTimeout(preRoundDelayTimeout);
+        preRoundDelayTimeout = null;
+      }
+      if (preRoundCountdownInterval) {
+        clearInterval(preRoundCountdownInterval);
+        preRoundCountdownInterval = null;
+      }
+      preRoundMsg.textContent = "";
+    }
+
+    // Socket events
+    socket.on("connect", () => {
+      statusEl.textContent = "Socket: connected";
+    });
+
+    socket.on("disconnect", () => {
+      exitCompactRound();
+      statusEl.textContent = "Socket: disconnected";
+      inRoom = false;
+      isDrawer = false;
+      isHost = false;
+      roundActive = false;
+      currentRoomCode = null;
+      settingsLocked = false;
+      clearTimer();
+      clearCanvas();
+      clearPreRound();
+      leaderboardBox.style.display = "none";
+      leaderboardList.innerHTML = "";
+      playersEl.textContent = "Players: (none)";
+      hostControlsBox.style.display = "none";
+      // Back to main menu
+      mainMenu.style.display = "block";
+      gameArea.style.display = "none";
+      log("[system] Disconnected", "system");
+      setRoleInfo();
+    });
+
+    socket.on("joined_room", ({ roomCode, name }) => {
+      inRoom = true;
+      currentRoomCode = roomCode;
+      setError("");
+      statusInGame.textContent = "Room: " + roomCode + " · Joining…";
+      log(`[system] Joined room ${roomCode} as "${name}"`, "system");
+      leaderboardBox.style.display = "none";
+      leaderboardList.innerHTML = "";
+      clearPreRound();
+      // Switch to game view
+      mainMenu.style.display = "none";
+      gameArea.style.display = "block";
+      setRoleInfo();
+    });
+
+    socket.on("join_error", ({ message }) => {
+      setError(message || "Error joining room");
+      log("[system] Join error: " + (message || ""), "system");
+      inRoom = false;
+      currentRoomCode = null;
+      setRoleInfo();
+    });
+
+    socket.on("room_state", ({ roomCode, players, hostId, drawerId, roundActive: rActive, currentCategory }) => {
+      roundActive = !!rActive;
+      isHost = (hostId === socket.id);
+      isDrawer = (drawerId === socket.id);
+      inRoom = true;
+      currentRoomCode = roomCode;
+
+      statusInGame.textContent = "Room: " + roomCode + " · " + (isHost ? "Host" : (isDrawer ? "Drawer" : "Player"));
+
+      // Update players list with scores & draws
+      if (!players || players.length === 0) {
+        playersEl.textContent = "Players: (none)";
+      } else {
+        const lines = players.map(p => {
+          let label = p.name;
+          if (p.id === socket.id) label += " (you)";
+          const bits = [];
+          bits.push(`${p.score} pts`);
+          bits.push(`draws: ${p.draws || 0}`);
+          if (p.id === hostId) bits.push("host");
+          if (p.id === drawerId) bits.push("drawer");
+          return `${label} – ${bits.join(" · ")}`;
+        });
+        playersEl.textContent = lines.join("\n");
+      }
+
+      // Host controls: only host sees the setup box
+      hostControlsBox.style.display = isHost ? "block" : "none";
+      if (isHost) {
+        startRoundBtn.disabled = settingsLocked; // only used for first start
+        resetGameBtn.disabled = false;
+        hostHint.textContent = settingsLocked
+          ? "Game settings locked for this game."
+          : "Choose a category & round length, then start.";
+      }
+
+      // Category display
+      categoryDisplay.textContent = currentCategory || "––";
+
+      // Guess enable/disable
+      if (!roundActive || isDrawer) {
+        guessInput.disabled = true;
+        guessBtn.disabled = true;
+      } else {
+        guessInput.disabled = false;
+        guessBtn.disabled = false;
+      }
+
+      // Drawer word visibility
+      if (!isDrawer) {
+        wordSecret.textContent = "– only for drawer –";
+      }
+
+      updateClearButton();
+      setRoleInfo();
+    });
+
+    socket.on("chat_message", ({ name, text }) => {
+      log(name + ": " + text);
+    });
+
+    socket.on("round_started", ({ drawerId, drawerName, category, roundDurationMs, roundEndTime: endTime }) => {
+      enterCompactRound();
+      roundActive = true;
+      isDrawer = (drawerId === socket.id);
+      roundEndTime = endTime;
+      clearCanvas();
+      clearTimer();
+      clearPreRound();
+      timerInterval = setInterval(updateTimer, 200);
+      updateTimer();
+      categoryDisplay.textContent = category;
+      wordSecret.textContent = isDrawer ? "(waiting for word…)" : "– only for drawer –";
+      leaderboardBox.style.display = "none";
+      leaderboardList.innerHTML = "";
+
+      // Lock settings for the whole game after first round starts (host-side)
+      if (isHost && !settingsLocked) {
+        settingsLocked = true;
+        categorySelect.disabled = true;
+        durationSelect.disabled = true;
+        startRoundBtn.disabled = true; // no more manual starts, auto only
+        hostHint.textContent = "Game settings locked for this game.";
+      }
+
+      if (isDrawer) {
+        log(`[system] You are drawing (${category}).`, "system");
+        guessInput.disabled = true;
+        guessBtn.disabled = true;
+      } else {
+        log(`[system] ${drawerName} is drawing (${category}).`, "system");
+        guessInput.disabled = false;
+        guessBtn.disabled = false;
+      }
+      updateClearButton();
+      setRoleInfo();
+    });
+
+    socket.on("your_word", ({ word }) => {
+      wordSecret.textContent = word;
+      log("[system] You are drawing: " + word, "system");
+    });
+
+    socket.on("player_guessed", ({ playerId, name }) => {
+      log(`[system] ${name} guessed correctly!`, "system");
+    });
+
+    socket.on("guess_result", ({ correct, score }) => {
+      if (correct) {
+        log(`[system] Correct! You scored ${score} this round.`, "system");
+        guessInput.disabled = true;
+        guessBtn.disabled = true;
+      } else {
+        log("[system] Not quite, try again.", "system");
+      }
+    });
+
+    socket.on("round_error", ({ message }) => {
+      log("[system] Round error: " + (message || ""), "system");
+      setError(message || "");
+    });
+
+    socket.on("round_ended", ({ word, category, drawerId, drawerName, results, reason }) => {
+      exitCompactRound();
+      roundActive = false;
+      clearTimer();
+      updateClearButton();
+      if (!drawerName) drawerName = "Drawer";
+      let why = "";
+      if (reason === "time_up") why = " (time up)";
+      if (reason === "all_guessed") why = " (everyone guessed)";
+      if (reason === "drawer_left") why = " (drawer left)";
+      log(`[system] Round ended${why}. The word was "${word}".`, "system");
+
+      if (results && results.length) {
+        const myRes = results.find(r => r.id === socket.id);
+        if (myRes) {
+          log(`[system] This round: ${myRes.roundScore} pts · Total: ${myRes.totalScore} pts`, "system");
+        }
+      }
+
+      guessInput.disabled = true;
+      guessBtn.disabled = true;
+      if (isHost) {
+        hostHint.textContent = "Calculating scores…";
+      }
+      setRoleInfo();
+    });
+
+    socket.on("ready_for_next_round", ({ nextDrawerId, nextDrawerName } = {}) => {
+      clearPreRound();
+      if (!inRoom) return;
+
+      const willDrawNext = nextDrawerId && nextDrawerId === socket.id;
+      const baseText = willDrawNext ? "Your turn to draw in " : "Your turn to guess in ";
+
+      preRoundMsg.textContent = "Calculating scores…";
+
+      let count = 5;
+      // after 2s, start visible countdown
+      preRoundDelayTimeout = setTimeout(() => {
+        preRoundMsg.textContent = baseText + count + "…";
+
+        preRoundCountdownInterval = setInterval(() => {
+          count -= 1;
+          if (count > 0) {
+            preRoundMsg.textContent = baseText + count + "…";
+          } else {
+            clearInterval(preRoundCountdownInterval);
+            preRoundCountdownInterval = null;
+            preRoundMsg.textContent = willDrawNext
+              ? "Your turn to draw!"
+              : "Your turn to guess!";
+          }
+        }, 1000);
+      }, 2000);
+    });
+
+    socket.on("game_over", ({ leaderboard, maxDraws }) => {
+      exitCompactRound();
+      roundActive = false;
+      clearTimer();
+      clearPreRound();
+      updateClearButton();
+      log(`[system] Game over! Each player drew ${maxDraws} time(s).`, "system");
+      leaderboardBox.style.display = "block";
+      leaderboardList.innerHTML = "";
+
+      if (!leaderboard || !leaderboard.length) return;
+      let i = 0;
+      function revealNext() {
+        if (i >= leaderboard.length) return;
+        const entry = leaderboard[i];
+        const row = document.createElement("div");
+        row.textContent = `${entry.name} – ${entry.score} pts`;
+        leaderboardList.appendChild(row);
+        i++;
+        if (i < leaderboard.length) {
+          setTimeout(revealNext, 800);
+        }
+      }
+      revealNext();
+
+      if (isHost) {
+        hostHint.textContent = "Game finished. You can play again.";
+      }
+    });
+
+    socket.on("game_reset", () => {
+      exitCompactRound();
+      log("[system] Game reset by host. Scores cleared.", "system");
+      leaderboardBox.style.display = "none";
+      leaderboardList.innerHTML = "";
+      clearTimer();
+      clearCanvas();
+      clearPreRound();
+      categoryDisplay.textContent = "––";
+      wordSecret.textContent = "– only for drawer –";
+      guessInput.disabled = true;
+      guessBtn.disabled = true;
+      settingsLocked = false;
+      if (isHost) {
+        categorySelect.disabled = false;
+        durationSelect.disabled = false;
+        hostHint.textContent = "Choose a category & round length, then start.";
+        startRoundBtn.disabled = false;
+      }
+    });
+
+    socket.on("draw_line", (data) => {
+      const { x0, y0, x1, y1, color } = data;
+      drawLine(x0, y0, x1, y1, color);
+    });
+
+    socket.on("clear", () => {
+      clearCanvas();
+    });
+
+    // Host / join from main menu
+    function hostRoom() {
+      if (!socket.connected) {
+        setError("Not connected to server.");
+        return;
+      }
+      const name = nameInput.value.trim().slice(0, 20);
+      if (!name) {
+        setError("Enter your name.");
+        return;
+      }
+      let code = roomInput.value.trim().toUpperCase();
+      if (!code) {
+        code = randomRoomCode();
+        roomInput.value = code;
+      }
+      socket.emit("set_name", name);
+      socket.emit("join_room", { roomCode: code, name });
+      setError("");
+    }
+
+    function joinRoom() {
+      if (!socket.connected) {
+        setError("Not connected to server.");
+        return;
+      }
+      const name = nameInput.value.trim().slice(0, 20);
+      if (!name) {
+        setError("Enter your name.");
+        return;
+      }
+      const code = roomInput.value.trim().toUpperCase();
+      if (!code) {
+        setError("Enter the host's room code.");
+        return;
+      }
+      socket.emit("set_name", name);
+      socket.emit("join_room", { roomCode: code, name });
+      setError("");
+    }
+
+    hostBtn.addEventListener("click", hostRoom);
+    joinBtn.addEventListener("click", joinRoom);
+
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") hostRoom();
+    });
+    roomInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") joinRoom();
+    });
+
+    // Host controls
+    startRoundBtn.addEventListener("click", () => {
+      if (!isHost) return;
+      const cat = categorySelect.value;
+      if (!cat) {
+        setError("Host: choose a category first.");
+        return;
+      }
+      const dur = durationSelect.value || "45000";
+      startRoundBtn.disabled = true;
+      hostHint.textContent = "";
+      setError("");
+      socket.emit("host_start_round", { category: cat, durationMs: dur });
+      log("[system] Host started game (" + cat + ", " + (parseInt(dur,10)/1000) + "s).", "system");
+    });
+
+    resetGameBtn.addEventListener("click", () => {
+      if (!isHost) return;
+      socket.emit("host_reset_game");
+    });
+
+    playAgainBtn.addEventListener("click", () => {
+      if (!isHost) return;
+      socket.emit("host_reset_game");
+    });
+
+    // Guessing
+    function sendGuess() {
+      if (!roundActive || isDrawer) return;
+      const text = guessInput.value.trim();
+      if (!text) return;
+      socket.emit("submit_guess", { guess: text });
+      guessInput.value = "";
+    }
+
+    guessBtn.addEventListener("click", sendGuess);
+    guessInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendGuess();
+      }
+    });
+
+    // Chat
+    function sendChat() {
+      const text = chatInput.value.trim();
+      if (!text || !inRoom) return;
+      socket.emit("chat_message", text);
+      chatInput.value = "";
+    }
+
+    chatSendBtn.addEventListener("click", sendChat);
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+
+    // Drawing
+    function drawLine(x0, y0, x1, y1, color) {
+      ctx.save();
+      if (color) {
+        ctx.strokeStyle = color;
+      } else {
+        ctx.strokeStyle = myColor;
+      }
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getCanvasPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      return { x, y };
+    }
+
+    function startDraw(evt) {
+      if (!inRoom || !roundActive || !isDrawer) return;
+      evt.preventDefault();
+      const pos = evt.touches ? getCanvasPos(evt.touches[0]) : getCanvasPos(evt);
+      isDrawing = true;
+      lastX = pos.x;
+      lastY = pos.y;
+    }
+
+    function moveDraw(evt) {
+      if (!isDrawing || !inRoom || !roundActive || !isDrawer) return;
+      evt.preventDefault();
+      const pos = evt.touches ? getCanvasPos(evt.touches[0]) : getCanvasPos(evt);
+      const x = pos.x, y = pos.y;
+      drawLine(lastX, lastY, x, y, myColor);
+      socket.emit("draw_line", { x0: lastX, y0: lastY, x1: x, y1: y, color: myColor });
+      lastX = x;
+      lastY = y;
+    }
+
+    function endDraw(evt) {
+      if (!isDrawing) return;
+      evt && evt.preventDefault();
+      isDrawing = false;
+    }
+
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", moveDraw);
+    canvas.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("mouseleave", endDraw);
+
+    canvas.addEventListener("touchstart", startDraw, { passive: false });
+    canvas.addEventListener("touchmove", moveDraw, { passive: false });
+    canvas.addEventListener("touchend", endDraw, { passive: false });
+    canvas.addEventListener("touchcancel", endDraw, { passive: false });
+
+    clearBtn.addEventListener("click", () => {
+      if (!inRoom || !roundActive || !isDrawer) return;
+      clearCanvas();
+      socket.emit("clear");
+    });
+
+    
+    // Colour palette setup
+    if (colorButtons && colorButtons.length > 0) {
+      colorButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const color = btn.getAttribute("data-color") || "#ffffff";
+          myColor = color;
+          ctx.strokeStyle = myColor;
+          colorButtons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+        });
+      });
+      // Default select white
+      colorButtons[0].classList.add("active");
+    }
+
+// Initial toggles
+    guessInput.disabled = true;
+    guessBtn.disabled = true;
+    hostControlsBox.style.display = "none";
+  </script>
+</body>
+</html>
