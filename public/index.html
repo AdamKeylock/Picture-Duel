@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Picture Duel · Rounds v5</title>
+  <title>Picture Duel · Rounds v7</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -33,6 +33,9 @@
     @media (max-width: 900px) {
       .grid-game {
         grid-template-columns: 1fr;
+      }
+      .compact-round .hide-during-round {
+        display: none !important;
       }
     }
     h1 { margin: 0 0 8px; font-size: 1.4rem; }
@@ -85,38 +88,6 @@
       margin-top: 4px;
     }
     .log-line.system { opacity: 0.7; font-style: italic; }
-    .color-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 6px;
-      flex-wrap: wrap;
-    }
-    .color-label {
-      font-size: 0.8rem;
-      opacity: 0.9;
-      margin-right: 4px;
-    }
-    .color-swatch {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      padding: 0;
-      border: 2px solid #444;
-      background: transparent;
-      cursor: pointer;
-    }
-    .color-swatch.active {
-      border-color: #fff;
-      box-shadow: 0 0 6px rgba(255,255,255,0.7);
-    }
-    @media (max-width: 900px) {
-      .compact-round .hide-during-round {
-        display: none !important;
-      }
-    }
-
-
     .col-left { display: flex; flex-direction: column; }
     .col-right { display: flex; flex-direction: column; }
     .box {
@@ -150,6 +121,34 @@
     #preRoundMsg {
       font-size: 0.9rem;
       margin-top: 4px;
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .color-label {
+      font-size: 0.8rem;
+      opacity: 0.9;
+    }
+    .color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      padding: 0;
+      border: 2px solid #444;
+      background: transparent;
+      cursor: pointer;
+    }
+    .color-swatch.active {
+      border-color: #fff;
+      box-shadow: 0 0 6px rgba(255,255,255,0.7);
+    }
+    #eraserBtn.eraser-active {
+      background: #666;
+      box-shadow: 0 0 6px rgba(255,255,255,0.6);
     }
   </style>
 </head>
@@ -203,6 +202,15 @@
             <button class="color-swatch" data-color="#ffff00" style="background:#ffff00;"></button>
             <button class="color-swatch" data-color="#ff00ff" style="background:#ff00ff;"></button>
             <button class="color-swatch" data-color="#00ffff" style="background:#00ffff;"></button>
+            <button class="color-swatch" data-color="#ffa500" style="background:#ffa500;"></button>
+            <button class="color-swatch" data-color="#800080" style="background:#800080;"></button>
+            <button class="color-swatch" data-color="#008000" style="background:#008000;"></button>
+            <button class="color-swatch" data-color="#8b4513" style="background:#8b4513;"></button>
+            <button class="color-swatch" data-color="#808080" style="background:#808080;"></button>
+            <button class="color-swatch" data-color="#ffc0cb" style="background:#ffc0cb;"></button>
+            <button class="color-swatch" data-color="#00bcd4" style="background:#00bcd4;"></button>
+            <button class="color-swatch" data-color="#9c27b0" style="background:#9c27b0;"></button>
+            <button id="eraserBtn" class="secondary small">Eraser</button>
           </div>
           <div class="row">
             <button id="clearBtn" class="secondary small">Clear (drawer only)</button>
@@ -229,14 +237,14 @@
                 <option value="sports">Sports</option>
                 <option value="jobs">Jobs</option>
                 <option value="actions">Actions</option>
-                <option value="wildcard">Wildcard</option>
                 <option value="transport">Transport</option>
                 <option value="fantasy">Fantasy</option>
+                <option value="wildcard">Wildcard</option>
               </select>
               <select id="durationSelect">
-                <option value="45000">45 sec</option>
-                <option value="60000">60 sec</option>
-                <option value="75000">75 sec</option>
+                <option value="75000">75 sec (speed)</option>
+                <option value="90000" selected>90 sec (default)</option>
+                <option value="120000">120 sec (relaxed)</option>
               </select>
             </div>
             <div class="row">
@@ -275,7 +283,7 @@
     </div>
   </div>
 
-  <!-- Socket.IO client via CDN, WITHOUT integrity attribute -->
+  <!-- Socket.IO client -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <script>
@@ -295,10 +303,6 @@
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const clearBtn = document.getElementById("clearBtn");
-    const colorButtons = document.querySelectorAll(".color-swatch");
-
-    let myColor = "#ffffff";
-
     const roleInfo = document.getElementById("roleInfo");
     const timerDisplay = document.getElementById("timerDisplay");
     const categoryDisplay = document.getElementById("categoryDisplay");
@@ -322,10 +326,16 @@
     const leaderboardList = document.getElementById("leaderboardList");
     const playAgainBtn = document.getElementById("playAgainBtn");
 
+    const colorButtons = document.querySelectorAll(".color-swatch");
+    const eraserBtn = document.getElementById("eraserBtn");
+
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = myColor;
     ctx.lineWidth = 3;
+
+    let myColor = "#ffffff";
+    let isErasing = false;
+    const eraseColor = "#222222";
 
     const socket = io();
 
@@ -342,16 +352,6 @@
     let settingsLocked = false;
 
     let preRoundDelayTimeout = null;
-
-    function enterCompactRound() {
-      if (window.innerWidth <= 900) {
-        document.body.classList.add("compact-round");
-      }
-    }
-
-    function exitCompactRound() {
-      document.body.classList.remove("compact-round");
-    }
     let preRoundCountdownInterval = null;
 
     function log(msg, type = "normal") {
@@ -434,13 +434,39 @@
       preRoundMsg.textContent = "";
     }
 
+    function enterCompactRound() {
+      if (window.innerWidth <= 900) {
+        document.body.classList.add("compact-round");
+      }
+    }
+
+    function exitCompactRound() {
+      document.body.classList.remove("compact-round");
+    }
+
+    function drawLine(x0, y0, x1, y1, color) {
+      ctx.save();
+      ctx.strokeStyle = color || myColor;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getCanvasPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      return { x, y };
+    }
+
     // Socket events
     socket.on("connect", () => {
       statusEl.textContent = "Socket: connected";
     });
 
     socket.on("disconnect", () => {
-      exitCompactRound();
       statusEl.textContent = "Socket: disconnected";
       inRoom = false;
       isDrawer = false;
@@ -451,11 +477,11 @@
       clearTimer();
       clearCanvas();
       clearPreRound();
+      exitCompactRound();
       leaderboardBox.style.display = "none";
       leaderboardList.innerHTML = "";
       playersEl.textContent = "Players: (none)";
       hostControlsBox.style.display = "none";
-      // Back to main menu
       mainMenu.style.display = "block";
       gameArea.style.display = "none";
       log("[system] Disconnected", "system");
@@ -471,7 +497,6 @@
       leaderboardBox.style.display = "none";
       leaderboardList.innerHTML = "";
       clearPreRound();
-      // Switch to game view
       mainMenu.style.display = "none";
       gameArea.style.display = "block";
       setRoleInfo();
@@ -494,7 +519,6 @@
 
       statusInGame.textContent = "Room: " + roomCode + " · " + (isHost ? "Host" : (isDrawer ? "Drawer" : "Player"));
 
-      // Update players list with scores & draws
       if (!players || players.length === 0) {
         playersEl.textContent = "Players: (none)";
       } else {
@@ -511,20 +535,17 @@
         playersEl.textContent = lines.join("\n");
       }
 
-      // Host controls: only host sees the setup box
       hostControlsBox.style.display = isHost ? "block" : "none";
       if (isHost) {
-        startRoundBtn.disabled = settingsLocked; // only used for first start
+        startRoundBtn.disabled = settingsLocked;
         resetGameBtn.disabled = false;
         hostHint.textContent = settingsLocked
           ? "Game settings locked for this game."
           : "Choose a category & round length, then start.";
       }
 
-      // Category display
       categoryDisplay.textContent = currentCategory || "––";
 
-      // Guess enable/disable
       if (!roundActive || isDrawer) {
         guessInput.disabled = true;
         guessBtn.disabled = true;
@@ -533,7 +554,6 @@
         guessBtn.disabled = false;
       }
 
-      // Drawer word visibility
       if (!isDrawer) {
         wordSecret.textContent = "– only for drawer –";
       }
@@ -561,12 +581,11 @@
       leaderboardBox.style.display = "none";
       leaderboardList.innerHTML = "";
 
-      // Lock settings for the whole game after first round starts (host-side)
       if (isHost && !settingsLocked) {
         settingsLocked = true;
         categorySelect.disabled = true;
         durationSelect.disabled = true;
-        startRoundBtn.disabled = true; // no more manual starts, auto only
+        startRoundBtn.disabled = true;
         hostHint.textContent = "Game settings locked for this game.";
       }
 
@@ -644,7 +663,6 @@
       preRoundMsg.textContent = "Calculating scores…";
 
       let count = 5;
-      // after 2s, start visible countdown
       preRoundDelayTimeout = setTimeout(() => {
         preRoundMsg.textContent = baseText + count + "…";
 
@@ -723,7 +741,6 @@
       clearCanvas();
     });
 
-    // Host / join from main menu
     function hostRoom() {
       if (!socket.connected) {
         setError("Not connected to server.");
@@ -774,7 +791,6 @@
       if (e.key === "Enter") joinRoom();
     });
 
-    // Host controls
     startRoundBtn.addEventListener("click", () => {
       if (!isHost) return;
       const cat = categorySelect.value;
@@ -782,7 +798,7 @@
         setError("Host: choose a category first.");
         return;
       }
-      const dur = durationSelect.value || "45000";
+      const dur = durationSelect.value || "90000";
       startRoundBtn.disabled = true;
       hostHint.textContent = "";
       setError("");
@@ -800,7 +816,6 @@
       socket.emit("host_reset_game");
     });
 
-    // Guessing
     function sendGuess() {
       if (!roundActive || isDrawer) return;
       const text = guessInput.value.trim();
@@ -817,7 +832,6 @@
       }
     });
 
-    // Chat
     function sendChat() {
       const text = chatInput.value.trim();
       if (!text || !inRoom) return;
@@ -833,28 +847,6 @@
       }
     });
 
-    // Drawing
-    function drawLine(x0, y0, x1, y1, color) {
-      ctx.save();
-      if (color) {
-        ctx.strokeStyle = color;
-      } else {
-        ctx.strokeStyle = myColor;
-      }
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    function getCanvasPos(evt) {
-      const rect = canvas.getBoundingClientRect();
-      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
-      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
-      return { x, y };
-    }
-
     function startDraw(evt) {
       if (!inRoom || !roundActive || !isDrawer) return;
       evt.preventDefault();
@@ -869,8 +861,9 @@
       evt.preventDefault();
       const pos = evt.touches ? getCanvasPos(evt.touches[0]) : getCanvasPos(evt);
       const x = pos.x, y = pos.y;
-      drawLine(lastX, lastY, x, y, myColor);
-      socket.emit("draw_line", { x0: lastX, y0: lastY, x1: x, y1: y, color: myColor });
+      const colorToUse = isErasing ? eraseColor : myColor;
+      drawLine(lastX, lastY, x, y, colorToUse);
+      socket.emit("draw_line", { x0: lastX, y0: lastY, x1: x, y1: y, color: colorToUse });
       lastX = x;
       lastY = y;
     }
@@ -897,23 +890,36 @@
       socket.emit("clear");
     });
 
-    
-    // Colour palette setup
+    // Colour palette + eraser
     if (colorButtons && colorButtons.length > 0) {
       colorButtons.forEach((btn) => {
         btn.addEventListener("click", () => {
           const color = btn.getAttribute("data-color") || "#ffffff";
           myColor = color;
+          isErasing = false;
           ctx.strokeStyle = myColor;
           colorButtons.forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
+          if (eraserBtn) {
+            eraserBtn.classList.remove("eraser-active");
+          }
         });
       });
-      // Default select white
       colorButtons[0].classList.add("active");
     }
 
-// Initial toggles
+    if (eraserBtn) {
+      eraserBtn.addEventListener("click", () => {
+        isErasing = !isErasing;
+        if (isErasing) {
+          eraserBtn.classList.add("eraser-active");
+        } else {
+          eraserBtn.classList.remove("eraser-active");
+        }
+      });
+    }
+
+    // Initial toggles
     guessInput.disabled = true;
     guessBtn.disabled = true;
     hostControlsBox.style.display = "none";
