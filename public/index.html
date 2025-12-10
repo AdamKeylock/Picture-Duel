@@ -5,22 +5,24 @@
   <title>Picture Duel · Rounds v7</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
+
     body {
-  margin:0;
-  font-family: system-ui, sans-serif;
-  background:#111;
-  color:#f5f5f5;
-  min-height:100vh;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-}
+      margin:0;
+      font-family: system-ui, sans-serif;
+      background:#111;
+      color:#f5f5f5;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+    }
+    #status { display: none !important; }
     .wrapper {
-  width: min(1150px, 100vw - 16px);
-  margin: 20px auto;
-}
+      width: min(1150px, 100vw - 16px);
+      margin: 20px auto;
+    }
     .card {
-      background: #181821;
+      background: #151515;
       border-radius: 12px;
       padding: 16px;
       border: 1px solid #333;
@@ -45,7 +47,7 @@
       padding: 6px 8px;
       border-radius: 999px;
       border: 1px solid #444;
-      background: #101018;
+      background: #0d0d0d;
       color: #f5f5f5;
     }
     button {
@@ -84,17 +86,44 @@
       font-size: 0.8rem;
       height: 120px;
       overflow-y: auto;
-      background: #101018;
+      background: #0d0d0d;
       margin-top: 4px;
     }
     .log-line.system { opacity: 0.7; font-style: italic; }
+
+    /* POP-UP leaderboard box (fixed + centred, slides up) */
+    #leaderboardBox {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, 60%);
+      opacity: 0;
+      z-index: 1000;
+      min-width: min(340px, 90vw);
+      max-width: 420px;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.9);
+      transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+    }
+    #leaderboardBox.leaderboard-visible {
+      transform: translate(-50%, -50%);
+      opacity: 1;
+    }
+
+    #guessBox.correct {
+      background: #12351f;
+      border-color: #2e7d32;
+    }
+    #guessBox.correct h2 {
+      color: #a5d6a7;
+    }
+
     .col-left { display: flex; flex-direction: column; }
     .col-right { display: flex; flex-direction: column; }
     .box {
-      background: #11131c;
+      background: #181818;
       border-radius: 8px;
       padding: 8px;
-      border: 1px solid #262838;
+      border: 1px solid #303030;
       margin-bottom: 8px;
     }
     .box h2 {
@@ -102,9 +131,60 @@
       font-size: 0.9rem;
       font-weight: 600;
     }
-    #timerDisplay {
-      font-variant-numeric: tabular-nums;
+    .round-header-row .small {
+      font-weight: 600;
+      letter-spacing: 0.03em;
     }
+    .round-main-row {
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    .round-main-row .small {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .round-pill {
+      background: radial-gradient(circle at top, #202020 0%, #111 60%, #050505 100%);
+      border-radius: 999px;
+      padding: 6px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+      cursor: default;
+      min-height: 30px;
+    }
+    .round-pill .pill-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      opacity: 0.7;
+    }
+    .round-pill .pill-value {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-left: 4px;
+    }
+    .round-word.round-pill .pill-value {
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .round-pill:active {
+      transform: translateY(1px);
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    }
+    .round-word {
+      flex: 1 1 auto;
+      min-width: 140px;
+    }
+    @media (max-width: 600px) {
+      .round-main-row {
+        align-items: flex-start;
+      }
+    }
+    #timerDisplay { font-variant-numeric: tabular-nums; font-size: 1.6rem; font-weight: 700; }
     #wordSecret {
       font-weight: 600;
       letter-spacing: 0.03em;
@@ -151,14 +231,14 @@
       box-shadow: 0 0 6px rgba(255,255,255,0.6);
     }
     #footer{ text-align:center; font-size:0.8rem; opacity:0.6; margin:20px 0; }
-</style>
+  </style>
 </head>
 <body>
   <div class="wrapper">
     <!-- MAIN MENU -->
     <div id="mainMenu" class="card">
       <h1>Picture Duel</h1>
-      <p class="small">Enter your name and room code to host or join a game.</p>
+      <p class="small">Enter your name and a room code to start.</p>
       <div class="row">
         <div>
           <label>Your name</label><br />
@@ -184,11 +264,27 @@
           <h1 class="hide-during-round">Picture Duel</h1>
           <div class="small hide-during-round" id="statusInGame">Room: –––– · <span id="roleInfo">Joining…</span></div>
 
-          <div class="box">
-            <h2>Round</h2>
-            <div class="small">Timer: <span id="timerDisplay">––</span></div>
-            <div class="small">Category: <span id="categoryDisplay">––</span></div>
-            <div class="small">Your word: <span id="wordSecret">– only for drawer –</span></div>
+          <div class="box" id="roundBox">
+            <div class="row round-header-row">
+              <div class="small">
+                Round <span id="roundNumber">–</span> · <span id="categoryDisplay">––</span>
+              </div>
+            </div>
+            <div class="row round-main-row">
+              <div class="small round-pill">
+                <span class="pill-label">Time</span>
+                <span class="pill-value" id="timerDisplay">––</span>
+              </div>
+              <div class="small round-pill">
+                <span class="pill-label">Drawing</span>
+                <span class="pill-value" id="nowDrawing">––</span>
+              </div>
+              <div class="small round-word round-pill">
+                <span class="pill-label">Word</span>
+                <span class="pill-value" id="wordSecret">– only for drawer –</span>
+              </div>
+            </div>
+            <div class="small">Next up: <span id="nextDrawing">––</span></div>
             <div class="small" id="preRoundMsg"></div>
           </div>
 
@@ -227,7 +323,7 @@
 
           <div class="box hide-during-round" id="hostControlsBox">
             <h2>Game setup (host)</h2>
-            <div class="small">Host chooses the category and round length, then starts the game.</div>
+            <div class="small">Host picks a category and time, then starts the game.</div>
             <div class="row">
               <select id="categorySelect">
                 <option value="">Choose category…</option>
@@ -255,9 +351,9 @@
             <div class="small" id="hostHint"></div>
           </div>
 
-          <div class="box">
+          <div class="box" id="guessBox">
             <h2>Guess</h2>
-            <div class="small">Guessers type here during a round.</div>
+            <div class="small">Guessers type here during the round.</div>
             <div class="row">
               <input id="guessInput" type="text" placeholder="Type your guess" style="flex:1;min-width:0;" />
               <button id="guessBtn" class="small">Guess</button>
@@ -277,6 +373,8 @@
             <h2>Game over</h2>
             <div class="small">Final scores (low → high):</div>
             <div id="leaderboardList"></div>
+            <div class="small" id="funStatsHeading" style="margin-top: 8px; display: none;">Fun stats</div>
+            <div id="funStatsList" class="small"></div>
             <button id="playAgainBtn" class="small">Play again (host)</button>
           </div>
         </div>
@@ -309,6 +407,10 @@
     const categoryDisplay = document.getElementById("categoryDisplay");
     const wordSecret = document.getElementById("wordSecret");
     const preRoundMsg = document.getElementById("preRoundMsg");
+    const nowDrawing = document.getElementById("nowDrawing");
+    const nextDrawing = document.getElementById("nextDrawing");
+    const guessBox = document.getElementById("guessBox");
+    const roundNumberEl = document.getElementById("roundNumber");
 
     const categorySelect = document.getElementById("categorySelect");
     const durationSelect = document.getElementById("durationSelect");
@@ -326,6 +428,8 @@
     const leaderboardBox = document.getElementById("leaderboardBox");
     const leaderboardList = document.getElementById("leaderboardList");
     const playAgainBtn = document.getElementById("playAgainBtn");
+    const funStatsHeading = document.getElementById("funStatsHeading");
+    const funStatsList = document.getElementById("funStatsList");
 
     const colorButtons = document.querySelectorAll(".color-swatch");
     const eraserBtn = document.getElementById("eraserBtn");
@@ -356,6 +460,8 @@
 
     let preRoundDelayTimeout = null;
     let preRoundCountdownInterval = null;
+    let currentRoundDurationMs = null;
+    let roundCount = 0;
 
     function log(msg, type = "normal") {
       const div = document.createElement("div");
@@ -381,12 +487,27 @@
     function updateTimer() {
       if (!roundActive || !roundEndTime) {
         timerDisplay.textContent = "––";
+        timerDisplay.style.color = "";
         return;
       }
       const now = Date.now();
       const remaining = Math.max(0, roundEndTime - now);
       const s = Math.ceil(remaining / 1000);
       timerDisplay.textContent = s + "s";
+
+      if (currentRoundDurationMs && currentRoundDurationMs > 0) {
+        const ratio = remaining / currentRoundDurationMs;
+        if (ratio > 0.66) {
+          timerDisplay.style.color = "#a5d6a7";
+        } else if (ratio > 0.33) {
+          timerDisplay.style.color = "#ffca28";
+        } else {
+          timerDisplay.style.color = "#ef5350";
+        }
+      } else {
+        timerDisplay.style.color = "";
+      }
+
       if (remaining <= 0) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -399,6 +520,7 @@
         timerInterval = null;
       }
       timerDisplay.textContent = "––";
+      timerDisplay.style.color = "";
     }
 
     function clearCanvas() {
@@ -435,6 +557,43 @@
         preRoundCountdownInterval = null;
       }
       preRoundMsg.textContent = "";
+    }
+
+    // Shared UI helpers
+    function setGuessControlsEnabled(enabled) {
+      if (!guessInput || !guessBtn) return;
+      guessInput.disabled = !enabled;
+      guessBtn.disabled = !enabled;
+    }
+
+    // Make sure the leaderboard actually appears and animates
+    function resetLeaderboardAndStats(show) {
+      if (!leaderboardBox || !leaderboardList) return;
+
+      // Always clear contents
+      leaderboardList.innerHTML = "";
+      if (funStatsList) funStatsList.innerHTML = "";
+      if (funStatsHeading) funStatsHeading.style.display = "none";
+
+      if (show) {
+        // Make it visible
+        leaderboardBox.style.display = "block";
+        // Reset animation state
+        leaderboardBox.classList.remove("leaderboard-visible");
+        // Force a reflow so the browser registers the starting state
+        void leaderboardBox.offsetWidth;
+        // Now trigger slide-up + fade-in
+        leaderboardBox.classList.add("leaderboard-visible");
+      } else {
+        // Hide and reset animation state
+        leaderboardBox.classList.remove("leaderboard-visible");
+        leaderboardBox.style.display = "none";
+      }
+    }
+
+    function resetGuessVisualState() {
+      if (guessBox) guessBox.classList.remove("correct");
+      if (guessBtn) guessBtn.style.display = "";
     }
 
     function enterCompactRound() {
@@ -477,6 +636,8 @@
 
     socket.on("disconnect", () => {
       statusEl.textContent = "Socket: disconnected";
+      roundCount = 0;
+      if (roundNumberEl) roundNumberEl.textContent = "–";
       inRoom = false;
       isDrawer = false;
       isHost = false;
@@ -487,8 +648,7 @@
       clearCanvas();
       clearPreRound();
       exitCompactRound();
-      leaderboardBox.style.display = "none";
-      leaderboardList.innerHTML = "";
+      resetLeaderboardAndStats(false);
       playersEl.textContent = "Players: (none)";
       hostControlsBox.style.display = "none";
       mainMenu.style.display = "block";
@@ -503,8 +663,7 @@
       setError("");
       statusInGame.textContent = "Room: " + roomCode + " · Joining…";
       log(`[system] Joined room ${roomCode} as "${name}"`, "system");
-      leaderboardBox.style.display = "none";
-      leaderboardList.innerHTML = "";
+      resetLeaderboardAndStats(false);
       clearPreRound();
       mainMenu.style.display = "none";
       gameArea.style.display = "block";
@@ -535,7 +694,7 @@
           let label = p.name;
           if (p.id === socket.id) label += " (you)";
           const bits = [];
-          bits.push(`${p.score} pts`);
+          // Hide live scores during the game – only show draws & roles
           bits.push(`draws: ${p.draws || 0}`);
           if (p.id === hostId) bits.push("host");
           if (p.id === drawerId) bits.push("drawer");
@@ -555,13 +714,7 @@
 
       categoryDisplay.textContent = currentCategory || "––";
 
-      if (!roundActive || isDrawer) {
-        guessInput.disabled = true;
-        guessBtn.disabled = true;
-      } else {
-        guessInput.disabled = false;
-        guessBtn.disabled = false;
-      }
+      setGuessControlsEnabled(roundActive && !isDrawer);
 
       if (!isDrawer) {
         wordSecret.textContent = "– only for drawer –";
@@ -576,6 +729,13 @@
     });
 
     socket.on("round_started", ({ drawerId, drawerName, category, roundDurationMs, roundEndTime: endTime }) => {
+      currentRoundDurationMs = roundDurationMs;
+      roundCount += 1;
+      if (roundNumberEl) {
+        roundNumberEl.textContent = roundCount;
+      }
+      if (nowDrawing) nowDrawing.textContent = drawerName || "––";
+      resetGuessVisualState();
       enterCompactRound();
       roundActive = true;
       isDrawer = (drawerId === socket.id);
@@ -587,8 +747,7 @@
       updateTimer();
       categoryDisplay.textContent = category;
       wordSecret.textContent = isDrawer ? "(waiting for word…)" : "– only for drawer –";
-      leaderboardBox.style.display = "none";
-      leaderboardList.innerHTML = "";
+      resetLeaderboardAndStats(false);
 
       if (isHost && !settingsLocked) {
         settingsLocked = true;
@@ -600,12 +759,10 @@
 
       if (isDrawer) {
         log(`[system] You are drawing (${category}).`, "system");
-        guessInput.disabled = true;
-        guessBtn.disabled = true;
+        setGuessControlsEnabled(false);
       } else {
         log(`[system] ${drawerName} is drawing (${category}).`, "system");
-        guessInput.disabled = false;
-        guessBtn.disabled = false;
+        setGuessControlsEnabled(true);
       }
       updateClearButton();
       setRoleInfo();
@@ -625,6 +782,10 @@
         log(`[system] Correct! You scored ${score} this round.`, "system");
         guessInput.disabled = true;
         guessBtn.disabled = true;
+        if (guessBox) {
+          guessBox.classList.add("correct");
+        }
+        guessBtn.style.display = "none";
       } else {
         log("[system] Not quite, try again.", "system");
       }
@@ -636,6 +797,7 @@
     });
 
     socket.on("round_ended", ({ word, category, drawerId, drawerName, results, reason }) => {
+      currentRoundDurationMs = null;
       exitCompactRound();
       roundActive = false;
       clearTimer();
@@ -654,8 +816,7 @@
         }
       }
 
-      guessInput.disabled = true;
-      guessBtn.disabled = true;
+      setGuessControlsEnabled(false);
       if (isHost) {
         hostHint.textContent = "Calculating scores…";
       }
@@ -663,6 +824,8 @@
     });
 
     socket.on("ready_for_next_round", ({ nextDrawerId, nextDrawerName } = {}) => {
+      if (nextDrawing) nextDrawing.textContent = nextDrawerName || "––";
+      if (nowDrawing) nowDrawing.textContent = "––";
       clearPreRound();
       if (!inRoom) return;
 
@@ -671,7 +834,7 @@
 
       preRoundMsg.textContent = "Calculating scores…";
 
-      let count = 5;
+      let count = 10;
       preRoundDelayTimeout = setTimeout(() => {
         preRoundMsg.textContent = baseText + count + "…";
 
@@ -690,17 +853,45 @@
       }, 2000);
     });
 
-    socket.on("game_over", ({ leaderboard, maxDraws }) => {
+    socket.on("game_over", ({ leaderboard, maxDraws, funStats }) => {
+      console.log("GAME_OVER EVENT", { leaderboard, maxDraws, funStats });
+
+      if (nowDrawing) nowDrawing.textContent = "––";
+      if (nextDrawing) nextDrawing.textContent = "––";
+      resetGuessVisualState();
       exitCompactRound();
       roundActive = false;
       clearTimer();
       clearPreRound();
       updateClearButton();
       log(`[system] Game over! Each player drew ${maxDraws} time(s).`, "system");
-      leaderboardBox.style.display = "block";
-      leaderboardList.innerHTML = "";
 
-      if (!leaderboard || !leaderboard.length) return;
+      // Force the leaderboard box to show and animate
+      resetLeaderboardAndStats(true);
+      if (leaderboardBox) {
+        leaderboardBox.style.display = "block";
+        // Ensure starting state for the animation
+        leaderboardBox.classList.remove("leaderboard-visible");
+        // Let the browser paint, then slide it up
+        requestAnimationFrame(() => {
+          leaderboardBox.classList.add("leaderboard-visible");
+        });
+      }
+
+      // If for some reason there are no entries, still leave the box visible
+      if (!leaderboard || !leaderboard.length) {
+        if (leaderboardList) {
+          const row = document.createElement("div");
+          row.textContent = "No scores available.";
+          leaderboardList.appendChild(row);
+        }
+        if (isHost && hostHint) {
+          hostHint.textContent = "Game finished. You can play again.";
+        }
+        return;
+      }
+
+      // Reveal scores one by one
       let i = 0;
       function revealNext() {
         if (i >= leaderboard.length) return;
@@ -715,23 +906,52 @@
       }
       revealNext();
 
-      if (isHost) {
+      // Render fun stats under the table
+      if (funStats && funStatsList && funStatsHeading) {
+        const lines = [];
+        if (funStats.quickestGuesser) {
+          const secs = (funStats.quickestGuesser.fastestMs / 1000).toFixed(1);
+          lines.push(`Quickest guesser: ${funStats.quickestGuesser.name} (correct in ${secs}s)`);
+        }
+        if (funStats.keenGuesser) {
+          lines.push(`Keen guesser: ${funStats.keenGuesser.name} (${funStats.keenGuesser.totalGuesses} guesses submitted)`);
+        }
+        if (funStats.mostArtistic) {
+          lines.push(`Most artistic: ${funStats.mostArtistic.name} (${funStats.mostArtistic.strokes} strokes drawn)`);
+        }
+        if (funStats.mostCorrect) {
+          lines.push(`Most correct guesses: ${funStats.mostCorrect.name} (${funStats.mostCorrect.correctGuesses} correct guesses)`);
+        }
+        if (lines.length) {
+          funStatsHeading.style.display = "block";
+          lines.forEach((text) => {
+            const div = document.createElement("div");
+            div.textContent = text;
+            funStatsList.appendChild(div);
+          });
+        }
+      }
+
+      if (isHost && hostHint) {
         hostHint.textContent = "Game finished. You can play again.";
       }
     });
 
     socket.on("game_reset", () => {
+      if (nowDrawing) nowDrawing.textContent = "––";
+      if (roundNumberEl) roundNumberEl.textContent = "–";
+      roundCount = 0;
+      if (nextDrawing) nextDrawing.textContent = "––";
+      resetGuessVisualState();
       exitCompactRound();
       log("[system] Game reset by host. Scores cleared.", "system");
-      leaderboardBox.style.display = "none";
-      leaderboardList.innerHTML = "";
+      resetLeaderboardAndStats(false);
       clearTimer();
       clearCanvas();
       clearPreRound();
       categoryDisplay.textContent = "––";
       wordSecret.textContent = "– only for drawer –";
-      guessInput.disabled = true;
-      guessBtn.disabled = true;
+      setGuessControlsEnabled(false);
       settingsLocked = false;
       if (isHost) {
         categorySelect.disabled = false;
@@ -929,13 +1149,10 @@
     }
 
     // Initial toggles
-    guessInput.disabled = true;
-    guessBtn.disabled = true;
+    setGuessControlsEnabled(false);
     hostControlsBox.style.display = "none";
-    
   </script>
-  
-  
-  <div id="footer">© 2025 Adam Balcombe — Keylock Games</div>
+
+  <div id="footer">© 2025 Adam Balcombe</div>
 </body>
 </html>
