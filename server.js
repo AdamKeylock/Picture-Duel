@@ -40,7 +40,7 @@ const WORDS = {
 const DEFAULT_ROUND_DURATION_MS = 90000; // 90 seconds default
 const MAX_DRAWS_PER_PLAYER = 3;
 const PRE_ROUND_DELAY_MS = 2000;   // "tally" time
-const PRE_ROUND_COUNTDOWN_MS = 5000; // visible 5s countdown
+const PRE_ROUND_COUNTDOWN_MS = 10000; // visible 5s countdown
 const AUTO_NEXT_ROUND_DELAY_MS = PRE_ROUND_DELAY_MS + PRE_ROUND_COUNTDOWN_MS;
 
 // rooms = {...} similar to earlier versions
@@ -254,9 +254,67 @@ function endRound(roomCode, reason) {
       }))
       .sort((a, b) => a.score - b.score);
 
+    // Build fun stats for the end-of-game screen
+    const playersArr = Object.values(room.players);
+
+    let quickestGuesser = null;
+    for (const p of playersArr) {
+      if (typeof p.fastestGuessMs !== "number") continue;
+      if (!quickestGuesser || p.fastestGuessMs < quickestGuesser.fastestGuessMs) {
+        quickestGuesser = {
+          name: p.name,
+          fastestMs: p.fastestGuessMs
+        };
+      }
+    }
+
+    let keenGuesser = null;
+    for (const p of playersArr) {
+      const guesses = p.totalGuesses || 0;
+      if (guesses <= 0) continue;
+      if (!keenGuesser || guesses > keenGuesser.totalGuesses) {
+        keenGuesser = {
+          name: p.name,
+          totalGuesses: guesses
+        };
+      }
+    }
+
+    let mostArtistic = null;
+    for (const p of playersArr) {
+      const strokes = p.strokes || 0;
+      if (strokes <= 0) continue;
+      if (!mostArtistic || strokes > mostArtistic.strokes) {
+        mostArtistic = {
+          name: p.name,
+          strokes
+        };
+      }
+    }
+
+    let mostCorrect = null;
+    for (const p of playersArr) {
+      const correct = p.correctGuesses || 0;
+      if (correct <= 0) continue;
+      if (!mostCorrect || correct > mostCorrect.correctGuesses) {
+        mostCorrect = {
+          name: p.name,
+          correctGuesses: correct
+        };
+      }
+    }
+
+    const funStats = {
+      quickestGuesser,
+      keenGuesser,
+      mostArtistic,
+      mostCorrect
+    };
+
     io.to(roomCode).emit("game_over", {
       leaderboard,
-      maxDraws: MAX_DRAWS_PER_PLAYER
+      maxDraws: MAX_DRAWS_PER_PLAYER,
+      funStats
     });
   } else {
     const nextDrawerId = pickNextDrawer(room);
@@ -338,10 +396,15 @@ io.on("connection", (socket) => {
       socket.join(code);
       socket.data.roomCode = code;
       const existing = room.players[socket.id];
+      const base = existing || {};
       room.players[socket.id] = {
         name: finalName,
-        score: existing ? existing.score : 0,
-        draws: existing ? existing.draws : 0
+        score: base.score || 0,
+        draws: base.draws || 0,
+        totalGuesses: base.totalGuesses || 0,
+        correctGuesses: base.correctGuesses || 0,
+        fastestGuessMs: typeof base.fastestGuessMs === "number" ? base.fastestGuessMs : null,
+        strokes: base.strokes || 0
       };
 
       if (!room.hostId) {
@@ -468,6 +531,9 @@ io.on("connection", (socket) => {
     const word = room.currentWord;
     if (!word) return;
 
+    // Count every meaningful guess for "keen guesser"
+    player.totalGuesses = (player.totalGuesses || 0) + 1;
+
     const already = room.guessState[playerId];
     if (already && already.correct) {
       return;
@@ -481,7 +547,12 @@ io.on("connection", (socket) => {
       const delta = now - room.roundStartTime;
       const score = scoreForDelta(delta);
 
+      // Update score & per-player fun stats
       player.score = (player.score || 0) + score;
+      player.correctGuesses = (player.correctGuesses || 0) + 1;
+      if (player.fastestGuessMs == null || delta < player.fastestGuessMs) {
+        player.fastestGuessMs = delta;
+      }
 
       if (room.drawerId && room.players[room.drawerId]) {
         room.players[room.drawerId].score =
@@ -530,6 +601,13 @@ io.on("connection", (socket) => {
     if (!data) return;
     const { x0, y0, x1, y1, color } = data;
     if ([x0, y0, x1, y1].some((v) => typeof v !== "number")) return;
+
+    // Track strokes for "most artistic" fun stat
+    const drawer = room.players[room.drawerId];
+    if (drawer) {
+      drawer.strokes = (drawer.strokes || 0) + 1;
+    }
+
     socket.to(roomCode).emit("draw_line", data);
   });
 
